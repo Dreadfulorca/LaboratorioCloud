@@ -1,0 +1,66 @@
+version: '3.7'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: unless-stopped
+    volumes:
+      - db_data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_DATABASE:      ${MYSQL_DATABASE}
+      MYSQL_USER:          ${MYSQL_USER}
+      MYSQL_PASSWORD:      ${MYSQL_PASSWORD}
+    secrets:
+      - mysql_root_password
+    networks:
+      - app_net
+
+  web:
+    image: webgl-apache:latest
+    container_name: web_app
+    restart: unless-stopped
+    depends_on:
+      - db
+    networks:
+      - app_net
+
+  proxy:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - app_net
+
+  auth:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak_auth
+    restart: unless-stopped
+    command:
+      - start-dev
+      - --http-relative-path=/auth
+    environment:
+      # Bootstrapping the initial admin user
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+    networks:
+      - app_net
+
+volumes:
+  db_data:
+  keycloak_data:
+
+secrets:
+  mysql_root_password:
+    file: ./secrets/mysql_root_password.txt
+
+networks:
+  app_net:
+    driver: bridge
